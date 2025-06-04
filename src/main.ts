@@ -1,5 +1,17 @@
-import { App, Plugin, PluginSettingTab, Setting, TFile } from "obsidian";
+import {
+	App,
+	CachedMetadata,
+	FileManager,
+	FrontMatterCache,
+	Notice,
+	Plugin,
+	PluginSettingTab,
+	Setting,
+	TFile,
+} from "obsidian";
 import { around } from "monkey-around";
+import { stat } from "fs/promises";
+import * as path from "path";
 
 interface PluginSettings {
 	propertyName: string;
@@ -16,6 +28,7 @@ export default class TemplateFolderPlugin extends Plugin {
 
 	async onload() {
 		await this.loadSettings();
+		const settings = this.settings;
 		this.addSettingTab(new SettingTab(this.app, this));
 
 		if (!this.app.internalPlugins.getPluginById("templates")?.enabled) return;
@@ -25,11 +38,37 @@ export default class TemplateFolderPlugin extends Plugin {
 			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
 			around(Object.getPrototypeOf(this.app.internalPlugins.getEnabledPluginById("templates")!), {
 				insertTemplate: (originalMethod) => {
-					return function (template: TFile) {
-						// Selected Template
-						console.log("Selected Template: ", template);
+					return async function (template: TFile) {
+						// Default fallback function to call the original method
+						const applyOriginal = () => originalMethod && originalMethod.apply(this, [template]);
 
-						return originalMethod && originalMethod.apply(this, [template]);
+						const metadata: CachedMetadata | undefined = this.app.metadataCache.getFileCache(template);
+						if (!metadata) return applyOriginal();
+
+						const frontmatter: FrontMatterCache | undefined = metadata.frontmatter;
+						if (!frontmatter) return applyOriginal();
+						const folderProperty = frontmatter[settings.propertyName];
+
+						// Check property type
+						if (typeof folderProperty != "string") {
+							console.error("Template Folder Property has to be of type 'text'!");
+							new Notice("Template Folder Property has to be of type 'text'!");
+							return applyOriginal();
+						}
+
+						// Check if property is a valid path
+						const absolutePath = path.join(this.app.vault.adapter.basePath, folderProperty);
+						if (!(await isValidDirectory(absolutePath))) {
+							console.error("Template Folder Property has to be an existing folder!");
+							new Notice("Template Folder Property has to be an existing folder!");
+							return applyOriginal();
+						}
+
+						const activeFile: TFile = this.app.workspace.getActiveFile();
+						const fileManager: FileManager = this.app.fileManager;
+						await fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
+
+						return applyOriginal();
 					};
 				},
 			})
@@ -83,5 +122,14 @@ class SettingTab extends PluginSettingTab {
 						this.display();
 					})
 			);
+	}
+}
+
+async function isValidDirectory(path: string) {
+	try {
+		const stats = await stat(path);
+		return stats.isDirectory();
+	} catch {
+		return false;
 	}
 }
