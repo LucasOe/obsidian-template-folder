@@ -1,16 +1,7 @@
-import {
-	App,
-	CachedMetadata,
-	FileManager,
-	FrontMatterCache,
-	Notice,
-	Plugin,
-	PluginSettingTab,
-	Setting,
-	TFile,
-} from "obsidian";
+import { Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import type { App, FrontMatterCache, TFile } from "obsidian";
 import { around } from "monkey-around";
-import { stat } from "fs/promises";
+import { statSync } from "fs";
 import * as path from "path";
 
 interface PluginSettings {
@@ -25,6 +16,7 @@ const DEFAULT_SETTINGS: PluginSettings = {
 
 export default class TemplateFolderPlugin extends Plugin {
 	settings: PluginSettings;
+	monkey_patches: (() => void)[] = [];
 
 	async onload() {
 		await this.loadSettings();
@@ -34,45 +26,60 @@ export default class TemplateFolderPlugin extends Plugin {
 		if (!this.app.internalPlugins.getPluginById("templates")?.enabled) return;
 		console.log("Template Folder Plugin loaded.");
 
-		this.register(
-			// eslint-disable-next-line @typescript-eslint/no-non-null-assertion
-			around(Object.getPrototypeOf(this.app.internalPlugins.getEnabledPluginById("templates")!), {
+		this.monkey_patches.push(
+			around(Object.getPrototypeOf(this.app.internalPlugins.getEnabledPluginById("templates")), {
 				insertTemplate: (originalMethod) => {
 					return async function (template: TFile) {
-						// Default fallback function to call the original method
-						const applyOriginal = () => originalMethod && originalMethod.apply(this, [template]);
+						const app: App = this.app;
 
-						const metadata: CachedMetadata | undefined = this.app.metadataCache.getFileCache(template);
-						if (!metadata) return applyOriginal();
+						const activeFile = app.workspace.getActiveFile();
+						if (!activeFile) return;
 
-						const frontmatter: FrontMatterCache | undefined = metadata.frontmatter;
-						if (!frontmatter) return applyOriginal();
-						const folderProperty = frontmatter[settings.propertyName];
+						// Apply the Template
+						//
+						// We're using our own implementation, because using the
+						// original method doesn't work reliably for some reason:
+						// `originalMethod.apply(this, [template]);`
+						const content = await app.vault.cachedRead(template);
+						await app.vault.modify(activeFile, content);
+
+						// Get Template property
+						const metadata = app.metadataCache.getFileCache(template);
+						if (!metadata || !metadata.frontmatter) return;
+						const folderProperty = metadata.frontmatter[settings.propertyName];
 
 						// Check property type
 						if (typeof folderProperty != "string") {
 							console.error("Template Folder Property has to be of type 'text'!");
 							new Notice("Template Folder Property has to be of type 'text'!");
-							return applyOriginal();
+							return;
 						}
 
 						// Check if property is a valid path
-						const absolutePath = path.join(this.app.vault.adapter.basePath, folderProperty);
-						if (!(await isValidDirectory(absolutePath))) {
+						const absolutePath = path.join(app.vault.adapter.basePath, folderProperty);
+						if (!isValidDirectory(absolutePath)) {
 							console.error("Template Folder Property has to be an existing folder!");
 							new Notice("Template Folder Property has to be an existing folder!");
-							return applyOriginal();
+							return;
 						}
 
-						const activeFile: TFile = this.app.workspace.getActiveFile();
-						const fileManager: FileManager = this.app.fileManager;
-						await fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
+						// Remove frontmatter
+						if (!settings.removeProperty) return;
+						if (!activeFile) return;
+						await app.fileManager.processFrontMatter(activeFile, (frontmatter: FrontMatterCache) => {
+							delete frontmatter[settings.propertyName];
+						});
 
-						return applyOriginal();
+						// Move active file
+						await app.fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
 					};
 				},
 			})
 		);
+	}
+
+	async onunload() {
+		for (const uninstall_monkey of this.monkey_patches) uninstall_monkey();
 	}
 
 	async loadSettings() {
@@ -125,10 +132,9 @@ class SettingTab extends PluginSettingTab {
 	}
 }
 
-async function isValidDirectory(path: string) {
+function isValidDirectory(path: string) {
 	try {
-		const stats = await stat(path);
-		return stats.isDirectory();
+		return statSync(path).isDirectory();
 	} catch {
 		return false;
 	}
