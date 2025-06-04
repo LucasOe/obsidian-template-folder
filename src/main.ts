@@ -24,7 +24,6 @@ export default class TemplateFolderPlugin extends Plugin {
 		this.addSettingTab(new SettingTab(this.app, this));
 
 		if (!this.app.internalPlugins.getPluginById("templates")?.enabled) return;
-		console.log("Template Folder Plugin loaded.");
 
 		this.monkey_patches.push(
 			around(Object.getPrototypeOf(this.app.internalPlugins.getEnabledPluginById("templates")), {
