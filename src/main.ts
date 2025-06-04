@@ -63,15 +63,15 @@ export default class TemplateFolderPlugin extends Plugin {
 							return;
 						}
 
+						// Move active file
+						await app.fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
+
 						// Remove frontmatter
 						if (!settings.removeProperty) return;
 						if (!activeFile) return;
 						await app.fileManager.processFrontMatter(activeFile, (frontmatter: FrontMatterCache) => {
 							delete frontmatter[settings.propertyName];
 						});
-
-						// Move active file
-						await app.fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
 					};
 				},
 			})
