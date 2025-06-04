@@ -39,9 +39,10 @@ export default class TemplateFolderPlugin extends Plugin {
 						//
 						// We're using our own implementation, because using the
 						// original method doesn't work reliably for some reason:
-						// `originalMethod.apply(this, [template]);`
+						// originalMethod.apply(this, [template]);
 						const content = await app.vault.cachedRead(template);
-						await app.vault.modify(activeFile, content);
+						const formattedContent = formatContent(this, content);
+						await app.vault.modify(activeFile, formattedContent);
 
 						// Get Template property
 						const metadata = app.metadataCache.getFileCache(template);
@@ -138,4 +139,29 @@ function isValidDirectory(path: string) {
 	} catch {
 		return false;
 	}
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function formatContent(context: any, content: string) {
+	// Replace {{title}}
+	const activeFile = this.app.workspace.getActiveFile();
+	content = content.replace(/\{\{title\}\}/g, activeFile.basename ?? "");
+
+	// Replace {{date}}
+	const DATE_PLACEHOLDER_REGEX = /\{\{date(?::(.*?))?\}\}/g;
+	const DEFAULT_DATE_FORMAT = "YYYY-MM-DD";
+	content = content.replace(DATE_PLACEHOLDER_REGEX, (_, fmt) => {
+		const format = fmt?.trim() || context.options.dateFormat || DEFAULT_DATE_FORMAT;
+		return window.moment().format(format);
+	});
+
+	// Replace {{time}}
+	const TIME_PLACEHOLDER_REGEX = /\{\{time(?::(.*?))?\}\}/g;
+	const DEFAULT_TIME_FORMAT = "HH:mm";
+	content = content.replace(TIME_PLACEHOLDER_REGEX, (_, fmt) => {
+		const format = fmt?.trim() || context.options.timeFormat || DEFAULT_TIME_FORMAT;
+		return window.moment().format(format);
+	});
+
+	return content;
 }
