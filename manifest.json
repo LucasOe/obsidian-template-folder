@@ -5,6 +5,6 @@
 	"minAppVersion": "0.15.0",
 	"description": "Moves notes to a folder when applying a template.",
 	"author": "LucasOe",
-	"authorUrl": "https://lucasoe.com",
+	"authorUrl": "https://github.com/LucasOe",
 	"isDesktopOnly": false
 }

@@ -1,7 +1,7 @@
 {
 	"name": "template-folder",
 	"version": "1.0.1",
-	"description": "This is a sample plugin for Obsidian (https://obsidian.md)",
+	"description": "Moves notes to a folder when applying a template.",
 	"main": "main.js",
 	"scripts": {
 		"dev": "node esbuild.config.mjs",
