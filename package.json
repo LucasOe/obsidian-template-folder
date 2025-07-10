@@ -1,6 +1,6 @@
 {
 	"name": "template-folder",
-	"version": "1.0.2",
+	"version": "1.0.3",
 	"description": "Moves notes to a folder when applying a template.",
 	"main": "main.js",
 	"scripts": {
