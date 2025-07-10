@@ -1,7 +1,6 @@
 import { Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import type { App, FrontMatterCache, TFile } from "obsidian";
 import { around } from "monkey-around";
-import { statSync } from "fs";
 import * as path from "path";
 
 interface PluginSettings {
@@ -55,16 +54,14 @@ export default class TemplateFolderPlugin extends Plugin {
 							return;
 						}
 
-						// Check if property is a valid path
-						const absolutePath = path.join(app.vault.adapter.basePath, folderProperty);
-						if (!isValidDirectory(absolutePath)) {
-							console.error("Template Folder Property has to be an existing folder!");
-							new Notice("Template Folder Property has to be an existing folder!");
+						// Move active file
+						try {
+							await app.fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
+						} catch (error) {
+							console.error(error);
+							new Notice(error);
 							return;
 						}
-
-						// Move active file
-						await app.fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
 
 						// Remove frontmatter
 						if (!settings.removeProperty) return;
@@ -129,14 +126,6 @@ class SettingTab extends PluginSettingTab {
 						this.display();
 					})
 			);
-	}
-}
-
-function isValidDirectory(path: string) {
-	try {
-		return statSync(path).isDirectory();
-	} catch {
-		return false;
 	}
 }
 
