@@ -1,7 +1,6 @@
 import { Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
 import type { App, FrontMatterCache, TFile } from "obsidian";
 import { around } from "monkey-around";
-import * as path from "path";
 
 interface PluginSettings {
 	propertyName: string;
@@ -54,9 +53,15 @@ export default class TemplateFolderPlugin extends Plugin {
 							return;
 						}
 
-						// Move active file
 						try {
-							await app.fileManager.renameFile(activeFile, path.join(folderProperty, activeFile.name));
+							// Create folder if it doesn't already exist
+							const folderPropertyNormalized = removeTrailingSlashes(folderProperty);
+							if (!app.vault.getFolderByPath(folderPropertyNormalized)) {
+								await app.vault.createFolder(folderPropertyNormalized);
+							}
+
+							// Move active file
+							await app.fileManager.renameFile(activeFile, joinPaths([folderProperty, activeFile.name]));
 						} catch (error) {
 							console.error(error);
 							new Notice(error);
@@ -127,6 +132,15 @@ class SettingTab extends PluginSettingTab {
 					})
 			);
 	}
+}
+
+function removeTrailingSlashes(path: string) {
+	return path.replace(/[/\\]+$/g, "");
+}
+
+function joinPaths(parts: string[]) {
+	const seperator = "/";
+	return parts.join(seperator).replace(new RegExp(seperator + "{1,}", "g"), seperator);
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
