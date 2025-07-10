@@ -27,33 +27,33 @@ export default class TemplateFolderPlugin extends Plugin {
 			around(Object.getPrototypeOf(this.app.internalPlugins.getEnabledPluginById("templates")), {
 				insertTemplate: (originalMethod) => {
 					return async function (template: TFile) {
-						const app: App = this.app;
-
-						const activeFile = app.workspace.getActiveFile();
-						if (!activeFile) return;
-
-						// Apply the Template
-						//
-						// We're using our own implementation, because using the
-						// original method doesn't work reliably for some reason:
-						// originalMethod.apply(this, [template]);
-						const content = await app.vault.cachedRead(template);
-						const formattedContent = formatContent(this, content);
-						await app.vault.modify(activeFile, formattedContent);
-
-						// Get Template property
-						const metadata = app.metadataCache.getFileCache(template);
-						if (!metadata || !metadata.frontmatter) return;
-						const folderProperty = metadata.frontmatter[settings.propertyName];
-
-						// Check property type
-						if (typeof folderProperty != "string") {
-							console.error("Template Folder Property has to be of type 'text'!");
-							new Notice("Template Folder Property has to be of type 'text'!");
-							return;
-						}
-
 						try {
+							const app: App = this.app;
+
+							const activeFile = app.workspace.getActiveFile();
+							if (!activeFile) return;
+
+							// Apply the Template
+							//
+							// We're using our own implementation, because using the
+							// original method doesn't work reliably for some reason:
+							// originalMethod.apply(this, [template]);
+							const content = await app.vault.cachedRead(template);
+							const formattedContent = formatContent(this, content);
+							await app.vault.modify(activeFile, formattedContent);
+
+							// Get Template property
+							const metadata = app.metadataCache.getFileCache(template);
+							if (!metadata || !metadata.frontmatter) return;
+							const folderProperty = metadata.frontmatter[settings.propertyName];
+
+							// Check property type
+							if (typeof folderProperty != "string") {
+								console.error("Template Folder Property has to be of type 'text'!");
+								new Notice("Template Folder Property has to be of type 'text'!");
+								return;
+							}
+
 							// Create folder if it doesn't already exist
 							const folderPropertyNormalized = removeTrailingSlashes(folderProperty);
 							if (!app.vault.getFolderByPath(folderPropertyNormalized)) {
@@ -62,18 +62,16 @@ export default class TemplateFolderPlugin extends Plugin {
 
 							// Move active file
 							await app.fileManager.renameFile(activeFile, joinPaths([folderProperty, activeFile.name]));
-						} catch (error) {
-							console.error(error);
-							new Notice(error);
-							return;
-						}
 
-						// Remove frontmatter
-						if (!settings.removeProperty) return;
-						if (!activeFile) return;
-						await app.fileManager.processFrontMatter(activeFile, (frontmatter: FrontMatterCache) => {
-							delete frontmatter[settings.propertyName];
-						});
+							// Remove frontmatter
+							if (!settings.removeProperty) return;
+							if (!activeFile) return;
+							await app.fileManager.processFrontMatter(activeFile, (frontmatter: FrontMatterCache) => {
+								delete frontmatter[settings.propertyName];
+							});
+						} catch (error) {
+							new Notice(error);
+						}
 					};
 				},
 			})
