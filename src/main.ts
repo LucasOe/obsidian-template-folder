@@ -104,7 +104,7 @@ class SettingTab extends PluginSettingTab {
 		containerEl.empty();
 
 		new Setting(containerEl)
-			.setName("Template Folder Property")
+			.setName("Template folder property")
 			.setDesc("Name of the frontmatter property in templates that defines where notes should be moved.")
 			.addText((text) =>
 				text //
@@ -118,8 +118,8 @@ class SettingTab extends PluginSettingTab {
 			);
 
 		new Setting(containerEl)
-			.setName("Remove Property")
-			.setDesc("Remove the Template Folder Property when applying the template to a note.")
+			.setName("Remove property")
+			.setDesc("Remove the template folder property when applying the template to a note.")
 			.addToggle((toggle) =>
 				toggle //
 					.setValue(this.plugin.settings.removeProperty)
