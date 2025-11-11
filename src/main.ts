@@ -1,4 +1,4 @@
-import { Notice, Plugin, PluginSettingTab, Setting } from "obsidian";
+import { Notice, Plugin, PluginSettingTab, Setting, normalizePath } from "obsidian";
 import type { App, FrontMatterCache, TFile } from "obsidian";
 import { around } from "monkey-around";
 
@@ -55,7 +55,7 @@ export default class TemplateFolderPlugin extends Plugin {
 							}
 
 							// Create folder if it doesn't already exist
-							const folderPropertyNormalized = removeTrailingSlashes(folderProperty);
+							const folderPropertyNormalized = normalizePath(folderProperty);
 							if (!app.vault.getFolderByPath(folderPropertyNormalized)) {
 								await app.vault.createFolder(folderPropertyNormalized);
 							}
@@ -132,13 +132,9 @@ class SettingTab extends PluginSettingTab {
 	}
 }
 
-function removeTrailingSlashes(path: string) {
-	return path.replace(/[/\\]+$/g, "");
-}
-
 function joinPaths(parts: string[]) {
 	const seperator = "/";
-	return parts.join(seperator).replace(new RegExp(seperator + "{1,}", "g"), seperator);
+	return normalizePath(parts.join(seperator));
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
