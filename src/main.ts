@@ -1,19 +1,9 @@
-import { Notice, Plugin, PluginSettingTab, Setting, normalizePath } from "obsidian";
-import type { App, FrontMatterCache, TFile } from "obsidian";
+import { App, FrontMatterCache, Notice, Plugin, TFile, normalizePath } from "obsidian";
 import { around } from "monkey-around";
-
-interface PluginSettings {
-	propertyName: string;
-	removeProperty: boolean;
-}
-
-const DEFAULT_SETTINGS: PluginSettings = {
-	propertyName: "folder",
-	removeProperty: true,
-};
+import { DEFAULT_SETTINGS, PluginSettings, SettingTab } from "./settings";
 
 export default class TemplateFolderPlugin extends Plugin {
-	settings: PluginSettings;
+	settings!: PluginSettings;
 	monkey_patches: (() => void)[] = [];
 
 	async onload() {
@@ -25,12 +15,10 @@ export default class TemplateFolderPlugin extends Plugin {
 
 		this.monkey_patches.push(
 			around(Object.getPrototypeOf(this.app.internalPlugins.getEnabledPluginById("templates")), {
-				insertTemplate: (originalMethod) => {
-					return async function (template: TFile) {
+				insertTemplate: (_originalMethod) => {
+					return async function (this: Plugin, template: TFile) {
 						try {
-							const app: App = this.app;
-
-							const activeFile = app.workspace.getActiveFile();
+							const activeFile = this.app.workspace.getActiveFile();
 							if (!activeFile) return;
 
 							// Apply the Template
@@ -38,12 +26,12 @@ export default class TemplateFolderPlugin extends Plugin {
 							// We're using our own implementation, because using the
 							// original method doesn't work reliably for some reason:
 							// originalMethod.apply(this, [template]);
-							const content = await app.vault.cachedRead(template);
-							const formattedContent = formatContent(this, content);
-							await app.vault.modify(activeFile, formattedContent);
+							const content = await this.app.vault.cachedRead(template);
+							const formattedContent = formatContent(this.app, content);
+							await this.app.vault.modify(activeFile, formattedContent);
 
 							// Get Template property
-							const metadata = app.metadataCache.getFileCache(template);
+							const metadata = this.app.metadataCache.getFileCache(template);
 							if (!metadata || !metadata.frontmatter) return;
 							const folderProperty = metadata.frontmatter[settings.propertyName];
 
@@ -56,21 +44,27 @@ export default class TemplateFolderPlugin extends Plugin {
 
 							// Create folder if it doesn't already exist
 							const folderPropertyNormalized = normalizePath(folderProperty);
-							if (!app.vault.getFolderByPath(folderPropertyNormalized)) {
-								await app.vault.createFolder(folderPropertyNormalized);
+							if (!this.app.vault.getFolderByPath(folderPropertyNormalized)) {
+								await this.app.vault.createFolder(folderPropertyNormalized);
 							}
 
 							// Move active file
-							await app.fileManager.renameFile(activeFile, joinPaths([folderProperty, activeFile.name]));
+							await this.app.fileManager.renameFile(
+								activeFile,
+								joinPaths([folderProperty, activeFile.name])
+							);
 
 							// Remove frontmatter
 							if (!settings.removeProperty) return;
 							if (!activeFile) return;
-							await app.fileManager.processFrontMatter(activeFile, (frontmatter: FrontMatterCache) => {
-								delete frontmatter[settings.propertyName];
-							});
+							await this.app.fileManager.processFrontMatter(
+								activeFile,
+								(frontmatter: FrontMatterCache) => {
+									delete frontmatter[settings.propertyName];
+								}
+							);
 						} catch (error) {
-							new Notice(error);
+							new Notice(error as string);
 						}
 					};
 				},
@@ -91,63 +85,23 @@ export default class TemplateFolderPlugin extends Plugin {
 	}
 }
 
-class SettingTab extends PluginSettingTab {
-	plugin: TemplateFolderPlugin;
-
-	constructor(app: App, plugin: TemplateFolderPlugin) {
-		super(app, plugin);
-		this.plugin = plugin;
-	}
-
-	display(): void {
-		const { containerEl } = this;
-		containerEl.empty();
-
-		new Setting(containerEl)
-			.setName("Template folder property")
-			.setDesc("Name of the frontmatter property in templates that defines where notes should be moved.")
-			.addText((text) =>
-				text //
-					.setPlaceholder(DEFAULT_SETTINGS.propertyName)
-					.setValue(this.plugin.settings.propertyName)
-					.onChange((value) => {
-						this.plugin.settings.propertyName = value;
-						this.plugin.saveSettings();
-						this.display();
-					})
-			);
-
-		new Setting(containerEl)
-			.setName("Remove property")
-			.setDesc("Remove the template folder property when applying the template to a note.")
-			.addToggle((toggle) =>
-				toggle //
-					.setValue(this.plugin.settings.removeProperty)
-					.onChange((value) => {
-						this.plugin.settings.removeProperty = value;
-						this.plugin.saveSettings();
-						this.display();
-					})
-			);
-	}
-}
-
 function joinPaths(parts: string[]) {
 	const seperator = "/";
 	return normalizePath(parts.join(seperator));
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function formatContent(context: any, content: string) {
+function formatContent(app: App, content: string) {
+	const templatePlugin = app.internalPlugins.getEnabledPluginById("templates");
+
 	// Replace {{title}}
-	const activeFile = this.app.workspace.getActiveFile();
-	content = content.replace(/\{\{title\}\}/g, activeFile.basename ?? "");
+	const activeFile = app.workspace.getActiveFile();
+	content = content.replace(/\{\{title\}\}/g, activeFile?.basename ?? "");
 
 	// Replace {{date}}
 	const DATE_PLACEHOLDER_REGEX = /\{\{date(?::(.*?))?\}\}/g;
 	const DEFAULT_DATE_FORMAT = "YYYY-MM-DD";
 	content = content.replace(DATE_PLACEHOLDER_REGEX, (_, fmt) => {
-		const format = fmt?.trim() || context.options.dateFormat || DEFAULT_DATE_FORMAT;
+		const format = fmt?.trim() || templatePlugin?.options.dateFormat || DEFAULT_DATE_FORMAT;
 		return window.moment().format(format);
 	});
 
@@ -155,7 +109,7 @@ function formatContent(context: any, content: string) {
 	const TIME_PLACEHOLDER_REGEX = /\{\{time(?::(.*?))?\}\}/g;
 	const DEFAULT_TIME_FORMAT = "HH:mm";
 	content = content.replace(TIME_PLACEHOLDER_REGEX, (_, fmt) => {
-		const format = fmt?.trim() || context.options.timeFormat || DEFAULT_TIME_FORMAT;
+		const format = fmt?.trim() || templatePlugin?.options.timeFormat || DEFAULT_TIME_FORMAT;
 		return window.moment().format(format);
 	});
 
